@@ -143,7 +143,7 @@ const Caret = () => {
     moveToLetter(stateCtx.position.wordIdx, stateCtx.position.letterIdx, stateCtx.containerRef, caretRef);
   }, [stateCtx]);
 
-  return <span className={`caret ${stateCtx.isGameInProgress ? '' : 'blur'}`} ref={caretRef} />;
+  return <span className={`caret ${stateCtx.isGameInProgress && stateCtx.isGameFocused ? '' : 'blur'}`} ref={caretRef} />;
 };
 
 const HiddenInput = () => {
