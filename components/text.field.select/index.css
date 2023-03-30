@@ -1,0 +1,8 @@
+.textfield-select .MuiSvgIcon-root {
+    fill: none;
+  }
+  
+  .textfield-select .down-arrow {
+    fill: #5f7bff !important; /* Only fill the endAdornment */
+  }
+  
