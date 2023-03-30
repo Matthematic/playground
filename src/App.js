@@ -1,442 +1,464 @@
-import React from "react";
-import "./App.css";
+import React, { useEffect, useRef, useState } from "react";
+import "./Grid.css";
+import { 
+  Grid,
+  TextField,
+  Paper,
+  ThemeProvider,
+  createTheme,
+  Container,
+  Autocomplete,
+  Button,
+  IconButton,
+  Snackbar,
+  Checkbox,
+  FormGroup,
+  FormControlLabel } from '@mui/material'
+import styled from 'styled-components';
+import fill from 'lodash.fill';
+import cloneDeep from 'lodash.clonedeep';
+import chunk from 'lodash.chunk';
+import flatten from 'lodash.flatten';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
 
-function getQuote(quotes, cb) {
-  const randomNumber = Math.floor(Math.random() * quotes.length);
-  const text = quotes[randomNumber].text;
-  cb(text);
+const theme = createTheme({
+  palette: {
+   mode: 'dark',
+  },
+});
+
+const CopyToClipboardButton = ({ text, valid }) => {
+  const [open, setOpen] = useState(false)
+  const handleClick = () => {
+    setOpen(true)
+    if (valid) {
+      navigator.clipboard.writeText(text)
+    }
+  }
+  
+  return (
+      <>
+        <Button onClick={handleClick} sx={{ textTransform: 'unset', overflowWrap: 'anywhere' }}>{text}</Button>
+        <Snackbar
+          open={open}
+          onClose={() => setOpen(false)}
+          autoHideDuration={2000}
+          message={valid ? "Copied to clipboard" : "Choose a name first"}
+        />
+      </>
+  )
 }
 
-function isKeyPrintable(e) {
-  let keycode = e.keyCode;
-
-  let valid =
-    (keycode > 47 && keycode < 58) || // number keys
-    keycode === 32 || keycode === 13 || // spacebar & return key(s) (if you want to allow carriage returns)
-    (keycode > 64 && keycode < 91) || // letter keys
-    (keycode > 95 && keycode < 112) || // numpad keys
-    (keycode > 185 && keycode < 193) || // ;=,-./` (in order)
-    (keycode > 218 && keycode < 223);   // [\]' (in order)
-
-  return valid;
+const ImportFromClipboardButton = ({ onCopy }) => {
+  const [open, setOpen] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const handleClick = async () => {
+    try {
+      await navigator.clipboard.readText().then(onCopy).then(() => setSuccess(true))
+    }
+    catch(e) {
+      console.log(e)
+      setSuccess(false)      
+    }
+    setOpen(true)
+  }
+  
+  return (
+      <>
+        <Button onClick={handleClick} sx={{ textTransform: 'unset', overflowWrap: 'anywhere' }}>Import</Button>
+        <Snackbar
+          open={open}
+          onClose={() => setOpen(false)}
+          autoHideDuration={2000}
+          message={success ? "Imported from clipboard" : "Error - Unable to import"}
+        />
+      </>
+  )
 }
 
-/**
- * If str1 is a source of truth, compare with str2 to determine if str2 is currently inside of a word.
- * e.g. "This is a sentence." => "This is a senten"
- * @param {*} str1 
- * @param {*} str2 
- */
-function withinWord(str1, str2) {
-  // Get the first char froms str1 thats after the end of str2, if it is NOT a space, then we are within a word
-  return str1[str2.length] === ' ' ? false : true;
+const FlipYButton = ({ onFlip }) => {
+  const [open, setOpen] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const handleClick = () => {
+    try {
+      onFlip()
+    }
+    catch(e) {
+      console.log(e)
+      setSuccess(false)      
+    }
+    setOpen(true)
+  }
+  
+  return (
+      <>
+        <Button onClick={handleClick} sx={{ textTransform: 'unset', overflowWrap: 'anywhere' }}>Flip Y</Button>
+        <Snackbar
+          open={open}
+          onClose={() => setOpen(false)}
+          autoHideDuration={2000}
+          message={success ? "Flipped" : "Error - Unable to flip"}
+        />
+      </>
+  )
 }
 
-const TyperStateContext = React.createContext();
-const TyperSetterContext = React.createContext();
+const FlipXButton = ({ onFlip }) => {
+  const [open, setOpen] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const handleClick = () => {
+    try {
+      onFlip()
+    }
+    catch(e) {
+      console.log(e)
+      setSuccess(false)      
+    }
+    setOpen(true)
+  }
+  
+  return (
+      <>
+        <Button onClick={handleClick} sx={{ textTransform: 'unset', overflowWrap: 'anywhere' }}>Flip X</Button>
+        <Snackbar
+          open={open}
+          onClose={() => setOpen(false)}
+          autoHideDuration={2000}
+          message={success ? "Flipped" : "Error - Unable to flip"}
+        />
+      </>
+  )
+}
+
+const TransposeButton = ({ onTranspose }) => {
+  const [open, setOpen] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const handleClick = () => {
+    try {
+      onTranspose()
+    }
+    catch(e) {
+      console.log(e)
+      setSuccess(false)      
+    }
+    setOpen(true)
+  }
+  
+  return (
+      <>
+        <Button onClick={handleClick} sx={{ textTransform: 'unset', overflowWrap: 'anywhere' }}>Transpose</Button>
+        <Snackbar
+          open={open}
+          onClose={() => setOpen(false)}
+          autoHideDuration={2000}
+          message={success ? "Transposed" : "Error - Unable to transpose"}
+        />
+      </>
+  )
+}
+
 
 // Root component for the typing test
 const Typer = () => {
-  const [input, setInput] = React.useState([]); // array of words
-  const [isGameInProgress, setIsGameInProgress] = React.useState(false);
-  const [isGameFocused, setIsGameFocused] = React.useState(false);
-  const [timings, setTimings] = React.useState({ start: undefined, end: undefined });
-  const [position, setPosition] = React.useState({ wordIdx: 0, letterIdx: 0 });
-  const [quote, setQuote] = React.useState([]); // array of words
-  const [allQuotes, setAllQuotes] = React.useState([]);
-  const [quoteModified, setQuoteModified] = React.useState(false);
-  const containerRef = React.useRef();
+  const ROWS = 10;
+  const [names, setNames] = useState([])
+  const autocompleteRef = useRef()
+  const [loading, setLoading] = useState(false)
+  const [input, setInput] = useState('')
+  const [icon, setIcon] = useState({ id: '952', label: 'Spade' })
+  const [tracks, setTracks] = useState([])
+  console.log(tracks)
+  const [layout, setLayout] = useState(true)
+  const [from, setFrom] = useState(null)
+  const [items, setItems] = useState(fill(new Array(8*ROWS), { id: -1, label: 'Blank' }, 0, 8*ROWS)) // { id, label, }
+  const [tagName, setTagName] = useState('')
+
 
   React.useEffect(() => {
-    fetch("https://type.fit/api/quotes")
+    setLoading(true)
+    fetch("https://static.runelite.net/cache/item/names.json")
       .then((res) => {
         if (res.ok) {
           return res.json();
         }
         throw new Error('Response is not OK');
       })
-      .then((data) => setAllQuotes(data))
+      .then((data) => {
+        setNames(shapeData(data))
+        setLoading(false)
+      })
       .catch(e => {
-        const message = "This message means that the web server supplying the quotes is down. Please refresh or try again later."
-        setAllQuotes([{ text: message }]);
+        setLoading(false)
         console.error(e);
       })
-  }, [setAllQuotes, setQuote]);
+  }, [ ]);
 
-  React.useEffect(() => {
-    // split into words
-    if (allQuotes.length) getQuote(allQuotes, (q) => setQuote(q.split(' ')));
-  }, [allQuotes]);
+  const bankTagString = `${tagName},${icon.id},${items.filter(i => i.id !== -1).map((i) => i.id).join(',')}`
+  const bankTagLayoutString = `banktaglayoutsplugin:${tagName},${items.map((i, idx) => `${i.id}:${idx}`).filter(s => !s.startsWith(-1))
+  .filter(i => i.id !== -1).join(',')}`
 
-  return (
-    <div className="typer" ref={containerRef}>
-      <TyperSetterContext.Provider
-        value={{
-          setInput,
-          setIsGameInProgress,
-          setQuote,
-          setQuoteModified,
-          setIsGameFocused,
-          setTimings,
-          setPosition,
-        }}
-      >
-        <TyperStateContext.Provider
-          value={{
-            input,
-            isGameInProgress,
-            quote,
-            allQuotes,
-            quoteModified,
-            isGameFocused,
-            timings,
-            position,
-            containerRef
-          }}
-        >
-          <Wrapper />
-        </TyperStateContext.Provider>
-      </TyperSetterContext.Provider>
-    </div>
-  );
+  const shapeData = (data) => {
+    const newData = []
+    for (const name in data) {
+      if (!newData.find(d => d.label === data[name])) { // remove duplicates, which are the same items but noted
+        newData.push({label: `${data[name]}`, id: name })
+      }
+    }
+    return newData
+  }
+
+  function addItem(e, v) {
+    console.log("v", v)
+    // find first blank
+    if (v) {
+      const firstBlank = items.indexOf(items.find(i => i.id === -1))
+      const newItems = cloneDeep(items)
+      newItems.splice(firstBlank, 1, v)
+      setItems(newItems)
+      setInput('')
+    }
+  }
+
+  function swapElements(array, index1, index2) {
+    array[index1] = array.splice(index2, 1, array[index1])[0];
 };
 
-/**
- * Wraps the main components. This is necessary to memoize since it is the direct child of the Context Provider
- */
-const Wrapper = React.memo(() => {
-  return (
-    <div className="wrapper">
-      <Quote />
-      <Overlay />
-    </div>
-  );
-});
-
-function moveToLetter(wordIdx, letterIdx, containerRef, caretRef, side = "left") {
-  const letter = containerRef.current.querySelector(
-    `.word-${wordIdx} .letter-${letterIdx}`
-  );
-
-  if (letter) {
-    const quote = containerRef.current.querySelector(".quote");
-    const letterRect = letter.getBoundingClientRect();
-    const quoteRect = quote.getBoundingClientRect();
-
-    caretRef.current.style.left = `${Math.max(
-      side === "left" ? letterRect.left - quoteRect.left - 1 : letterRect.right - quoteRect.left - 1,
-      0
-    )}px`;
-    caretRef.current.style.top = `${letterRect.top - quoteRect.top + 3}px`;
-    letter.scrollIntoView();
-  }
-  else if (letterIdx > 0) { // move to the right side of the previous letter
-    moveToLetter(wordIdx, letterIdx - 1, containerRef, caretRef, "right");
-  }
-}
-
-const Caret = () => {
-  const stateCtx = React.useContext(TyperStateContext);
-  const caretRef = React.useRef();
-
-  React.useEffect(() => {
-    moveToLetter(stateCtx.position.wordIdx, stateCtx.position.letterIdx, stateCtx.containerRef, caretRef);
-  }, [stateCtx]);
-
-  return <span className={`caret ${stateCtx.isGameInProgress && stateCtx.isGameFocused ? '' : 'blur'}`} ref={caretRef} />;
-};
-
-const HiddenInput = () => {
-  const stateCtx = React.useContext(TyperStateContext);
-  const setterCtx = React.useContext(TyperSetterContext);
-  const ref = React.useRef();
-  const combinedWords = combineWordArrays(stateCtx.input, stateCtx.quote);
-
-  // Handle key inputs during the game
-  const onKeyDown = (e) => {
-    if (e.key === "Backspace" && stateCtx.isGameInProgress) {
-      if (combinedWords[stateCtx.position.wordIdx][stateCtx.position.letterIdx - 1] !== undefined) { // go back a letter if we can
-        setterCtx.setPosition({ wordIdx: stateCtx.position.wordIdx, letterIdx: stateCtx.position.letterIdx - 1 });
-      }
-      else if (combinedWords[stateCtx.position.wordIdx - 1] !== undefined) { // else go back a word if we can
-        setterCtx.setPosition({ wordIdx: stateCtx.position.wordIdx - 1, letterIdx: combinedWords[stateCtx.position.wordIdx - 1].length });
-      }
-
-      // If there is input and one letter back exists, 
-      if (stateCtx.input.length && stateCtx.position.letterIdx > 0 && stateCtx.input[stateCtx.position.wordIdx][stateCtx.position.letterIdx - 1]) {
-        const newInput = [...stateCtx.input];
-        newInput[stateCtx.position.wordIdx] = newInput[stateCtx.position.wordIdx].slice(0, -1);
-        setterCtx.setInput(newInput.filter(Boolean));
-      }
-    } else if (e.key === "Escape" && stateCtx.isGameInProgress) {
-      setterCtx.setIsGameInProgress(false);
-      setterCtx.setTimings({ start: stateCtx.timings.start, end: Date.now() });
-      setterCtx.setPosition({ wordIdx: 0, letterIdx: 0 });
-    } else if (e.code === "Space" && !stateCtx.isGameInProgress) {
-      setterCtx.setIsGameInProgress(true);
-      if (stateCtx.input.length) {
-        setterCtx.setInput([]);
-        getQuote(stateCtx.allQuotes, (q) => setterCtx.setQuote(q.split(' ')));
-      }
-      setterCtx.setTimings({ start: Date.now(), end: undefined });
-    }
-    if (e.code === "Space" && stateCtx.isGameInProgress) { // Move to next word
-      // If there is no next word to jump to, end the game
-      if (stateCtx.quote[stateCtx.position.wordIdx + 1] === undefined) {
-        setterCtx.setIsGameInProgress(false);
-        setterCtx.setTimings({ start: stateCtx.timings.start, end: Date.now() });
-        setterCtx.setPosition({ wordIdx: 0, letterIdx: 0 });
-      }
-      else if (stateCtx.input[stateCtx.position.wordIdx]) { // increment wordIdx and add a new blank word to input array
-        setterCtx.setPosition({ wordIdx: stateCtx.position.wordIdx + 1, letterIdx: 0 });
-      }
-    }
-    else if (isKeyPrintable(e)) {
-      if (stateCtx.isGameInProgress) { // tack typed key onto end of last word
-        const copy = [...stateCtx.input];
-        if (copy[stateCtx.position.wordIdx]) {
-          copy[stateCtx.position.wordIdx] += e.key;
-        }
-        else {
-          copy.push(e.key);
-        }
-
-        setterCtx.setInput(copy);
-
-        // If there is no next letter OR word to jump to, end the game
-        if (stateCtx.quote[stateCtx.position.wordIdx][stateCtx.position.letterIdx + 1] === undefined
-          && stateCtx.quote[stateCtx.position.wordIdx + 1] === undefined) {
-          setterCtx.setIsGameInProgress(false);
-          setterCtx.setTimings({ start: stateCtx.timings.start, end: Date.now() });
-          setterCtx.setPosition({ wordIdx: 0, letterIdx: 0 });
-        }
-        else {
-          setterCtx.setPosition({ wordIdx: stateCtx.position.wordIdx, letterIdx: stateCtx.position.letterIdx + 1 }); // increment letterIdx
-        }
-      }
-    }
-  };
-
-  // Start the game when the user clicks on the input
-  const onClick = () => {
-    if (!stateCtx.isGameInProgress && combinedWords.join('').length >= stateCtx.quote.length) {
-      setterCtx.setIsGameInProgress(true);
-    }
-  };
-
-  // Pause the game when the game loses focus.
-  const onBlur = () => {
-    setterCtx.setIsGameFocused(false);
-  }
-
-  return (
-    <input
-      readOnly
-      className="hidden-input"
-      type="text"
-      value=""
-      onKeyDown={onKeyDown}
-      onClick={onClick}
-      onBlur={onBlur}
-      ref={ref}
-    />
-  );
-};
-
-function combineWordArrays(inputArr, quoteArr) {
-  if (!quoteArr || !quoteArr.length || !inputArr) {
-    return [];
-  }
-  const combinedWords = quoteArr.map((quoteWord, quoteWordIdx) => {
-    // if user has extra chars on the end of this word then grab them and add them to quoteWord
-    if (inputArr[quoteWordIdx] && inputArr[quoteWordIdx].length > quoteWord.length) {
-      return quoteWord + inputArr[quoteWordIdx].substring(quoteWord.length);
-    }
-    return quoteWord;
-  });
-  return combinedWords;
-}
-
-const Quote = () => {
-  const stateCtx = React.useContext(TyperStateContext);
-  const combinedWords = combineWordArrays(stateCtx.input, stateCtx.quote) || [];
-
-  return (
-    <div className={"quote"}>
-      <div className={!stateCtx.isGameInProgress || !stateCtx.isGameFocused ? "letters blur" : "letters"}>
-        {combinedWords.map((t, i) => (
-          <Word
-            key={`word-${i}`}
-            value={t}
-            index={i}
-          />
-        ))}
-      </div>
-      <Caret />
-      <HiddenInput />
-      {stateCtx.isGameInProgress && stateCtx.isGameFocused ? (
-        <>
-          <hr />
-          <TimeLabel />
-        </>
-      ) : null}
-    </div>
-  );
-};
-
-// This function assumes the strings are of equal length
-function getAccuracy(str1, str2) {
-  if (!str1.length) {
-    return 0;
-  }
-  let differentChars = 0;
-  for (let i = 0; i < str1.length; i++) {
-    if (str1[i] !== str2[i]) {
-      differentChars++;
-    }
-  }
-
-  return (((str1.length - differentChars) / str1.length) * 100).toPrecision(3);
-}
-
-const Overlay = () => {
-  const stateCtx = React.useContext(TyperStateContext);
-  const setterCtx = React.useContext(TyperSetterContext);
-
-  const onStart = () => {
-    setterCtx.setIsGameInProgress(true);
-    if (stateCtx.input.length) {
-      setterCtx.setInput([]);
-      getQuote(stateCtx.allQuotes, (q) => setterCtx.setQuote(q.split(' ')));
-    }
-    setterCtx.setTimings({ start: Date.now(), end: undefined });
-    document.querySelector(".hidden-input").focus();
-    setterCtx.setIsGameFocused(true);
-  };
-
-  if (!stateCtx.isGameInProgress) {
-    const numCorrectWords = stateCtx.quote.reduce((accumulator, currentValue, i) => {
-      if (stateCtx.input[i] === currentValue) {
-        return accumulator + 1;
-      }
-      return accumulator;
-    },
-      0);
-    const timeSeconds = (stateCtx.timings.end - stateCtx.timings.start) / 1000;
-    const wpm = ((numCorrectWords / timeSeconds) * 60).toPrecision(3);
-
-    return (
-      <div className="overlay" onClick={onStart}>
-        <div className="overlay-inner">
-          <h2>{stateCtx.isGameFocused ? 'spacebar' : 'click'}  to begin</h2>
-          {timeSeconds && !stateCtx.isGameInProgress ? (
-            <>
-              <div>{wpm} wpm | {getAccuracy(stateCtx.input, stateCtx.quote)}%</div>
-            </>
-          ) : null}
-        </div>
-      </div>
-    )
-  }
-
-  const onResume = () => {
-    setterCtx.setIsGameInProgress(true);
-    document.querySelector(".hidden-input").focus();
-    setterCtx.setIsGameFocused(true);
-  }
-
-  if (!stateCtx.isGameFocused) {
-    return (
-      <div className="overlay" onClick={onResume}>
-        <div className="overlay-inner">
-          <h2>click to resume</h2>
-        </div>
-      </div>
-    );
-  }
-  else {
-    return null;
-  }
-
-
-};
-
-const Letter = React.memo(({ value, index, isCorrect }) => {
-  let colorVal = "";
-  switch (isCorrect) {
-    case 1:
-      colorVal = "correct-letter";
-      break;
-    case 0:
-      colorVal = "extra-letter";
-      break;
-    case -1:
-      colorVal = "incorrect-letter";
-      break;
-    default:
-      colorVal = "";
-  }
-
-  return <span className={`letter letter-${index} ${colorVal}`}>{value}</span>;
-});
-
-const Word = ({ value, index }) => {
-  const stateCtx = React.useContext(TyperStateContext);
-
-  if (!value.length) {
-    return null;
-  }
-
-  const isLetterCorrect = (wordIdx, letterIdx) => {
-    if (wordIdx === undefined || letterIdx === undefined || !stateCtx.input.length || !stateCtx.quote.length || !stateCtx.input[wordIdx] || !stateCtx.input[wordIdx][letterIdx]) {
-      return undefined;
-    }
-    else if (stateCtx.quote[wordIdx][letterIdx] === stateCtx.input[wordIdx][letterIdx]) {
-      return 1;
-    }
-    else if (!stateCtx.quote[wordIdx][letterIdx]) {
-      return 0
-    }
-    else if (stateCtx.quote[wordIdx][letterIdx] !== stateCtx.input[wordIdx][letterIdx]) {
-      return -1;
-    }
-
-    return undefined;
-  }
-
-  return (
-    <span className={`word word-${index}`}>
-      {[...value].map((letter, i) => (
-        <Letter
-          key={`word-${index}-letter-${i}`}
-          value={letter}
-          index={i}
-          isCorrect={isLetterCorrect(index, i)}
-        />
-      ))}
-    </span>
-  );
-}
-
-const TimeLabel = () => {
-  const stateCtx = React.useContext(TyperStateContext);
-  const [timeElapsed, setTimeElapsed] = React.useState(0);
-
-  React.useEffect(() => {
-    let timer;
-    if (stateCtx.isGameFocused && stateCtx.isGameInProgress) {
-      timer = setInterval(() => {
-        setTimeElapsed(timeElapsed + 1);
-      }, 1000)
+  function onSelectItem(idx) {
+    if (from === null) {
+      setFrom(idx)
     }
     else {
-      clearInterval(timer);
+      const newItems = cloneDeep(items)
+      swapElements(newItems, from, idx)
+      setItems(newItems)
+      setFrom(null)
     }
-    return () => clearInterval(timer);
-  }, [stateCtx.isGameFocused, stateCtx.isGameInProgress, timeElapsed, setTimeElapsed]);
+  }
 
-  return <label className="time-label">{timeElapsed}</label>;
+  function onRemoveItem(idx) {
+    const newItems = cloneDeep(items)
+    newItems.splice(idx, 1, { id: -1, label: 'Blank' })
+    setItems(newItems)
+    setFrom(null)
+  }
+
+  function addBlankRow(idx) {
+    const newRow = fill(new Array(8), { id: -1, label: 'Blank' }, 0, 8)
+    const newItems = chunk(cloneDeep(items), 8)
+    newItems.splice(idx+1, 0, newRow)
+    setItems(flatten(newItems))
+  }
+
+  function removeRow(idx) {
+    const newItems = chunk(cloneDeep(items), 8)
+    newItems.splice(idx, 1)
+    setItems(flatten(newItems))
+  }
+
+  function onImport(tag) {
+    if (tag.startsWith('banktaglayoutsplugin')) {
+      const splitTag = tag.split(',');
+      const tagName = splitTag[0].split(':')[1]
+      splitTag.splice(0, 1)
+      splitTag.splice(splitTag.indexOf(`banktag:${tagName}`))
+
+      let highestPos = 0
+      splitTag.forEach(item => {
+        const pos = item.split(':')[1]
+        if (Number(pos) > highestPos) {
+          highestPos = Number(pos)
+        }
+      })
+
+
+
+      const numRows = Math.ceil((highestPos+1) / 8)
+      const numItems = numRows*8
+      const itemList = fill(new Array(numItems), { id: -1, label: 'Blank' }, 0, numItems)
+
+      for (const i in splitTag) {
+        const id = splitTag[i].split(':')[0]
+        const position = splitTag[i].split(':')[1]
+        const found = names.find(n => n.id === id)
+        if (found) {
+          itemList[position] = { id, label: found.label }
+        }
+        else {
+          console.error(`no item found for ${id}`)
+        }
+      }
+
+      setTagName(tagName)
+      setItems(itemList)
+    }
+    else {
+      throw new Error("Attempted to import invalid tag")
+    }
+  }
+
+  function onFlipY() {
+    const newItems = chunk(cloneDeep(items), 8)
+    newItems.reverse()
+    setItems(flatten(newItems))
+  }
+
+  const transpose = arr => {
+    const copy = cloneDeep(arr)
+    for (let i = 0; i < copy.length; i++) {
+       for (let j = 0; j < i; j++) {
+          const tmp = copy[i][j];
+          copy[i][j] = copy[j][i];
+          copy[j][i] = tmp;
+       };
+    }
+    return copy
+ }
+
+ function onTranspose() {
+  const transposed = transpose(cloneDeep(chunk(items, 8)))
+  console.log(transposed)
+  setItems(flatten(transposed))
+ }
+
+  function onFlipX(track) {
+    const newItems = chunk(cloneDeep(items), 8)
+    for (const row in newItems) {
+      newItems[row].reverse()
+    }
+    setItems(flatten(newItems))
+  }
+  
+
+  return (
+      <ThemeProvider theme={theme}>
+        <Paper elevation={1} sx={{ height: '100%', width: '100%' }}>
+        <Container>
+          <Paper elevation={6} sx={{ width: '1000px', margin: 'auto' }}>
+            <FormGroup>
+              <Container>
+                <SideBySide style={{ marginTop: '20px' }}>
+                  <TextField required onChange={(e) => setTagName(e.target.value)}  label="Name your tag" name="name" value={tagName} />
+                  <FormControlLabel control={<Checkbox defaultChecked sx={{ marginLeft: '20px' }} onChange={(e) => setLayout(e.target.checked)} />} label="Layout" />
+                  <ImportFromClipboardButton onCopy={onImport} />
+                  <FlipXButton onFlip={onFlipX} />
+                  <FlipYButton onFlip={onFlipY} />
+                  <TransposeButton onTranspose={onTranspose}/>
+                </SideBySide>
+                <Autocomplete
+                  ref={autocompleteRef}
+                  sx={{ width: '100%', marginTop: '20px', marginBottom: '50px' }}
+                  disablePortal
+                  value={input}
+                  loading={loading}
+                  freeSolo
+                  clearOnEscape
+                  clearOnBlur
+                  autoHighlight
+                  autoComplete
+                  options={names}
+                  onChange={addItem}
+                  onInputChange={(e) => {
+                    if (e) {
+                      setInput(e.target.value)
+                    }
+                  }}
+                  renderInput={(params) => <TextField {...params} label="Search for an item" />}
+                />
+                <Grid container xs={12}>
+                  <Grid item xs={3} />
+                  <Grid container item xs={6} rowSpacing={1}>
+                    <>
+                      <Grid item xs={0.5} />
+                      { chunk(items, 8)[0].map((item, idx) => (
+                        <>
+                        <Grid 
+                          item 
+                          xs={1.375} 
+                          key={idx} >
+                          <Checkbox onChange={() => setTracks([...tracks, { type: 'column', idx }])} />
+                        </Grid>
+                        
+                        </>
+                      )) }
+                      <Grid item xs={0.5} /> 
+                    </>
+
+                    { chunk(items, 8).map((row, idx) => {
+                      
+                      return (
+                      <>
+                        <Grid item xs={0.5}>
+                          <IconButton aria-label="add" sx={{ marginLeft: '-20px' }} onClick={() => removeRow(idx)}>
+                            <RemoveIcon />
+                          </IconButton>
+                        </Grid>
+                        { row.map((item, itemIdx) => {
+
+                          return (
+                          <Grid 
+                            item 
+                            xs={1.375} 
+                            key={idx} 
+                            onClick={(e) => {
+                              switch (e.detail) {
+                                case 1:
+                                  onSelectItem((idx*8)+itemIdx)
+                                  break;
+                                case 2:
+                                  onRemoveItem((idx*8)+itemIdx)
+                                  break;
+                                default:
+                                  break;
+                              }
+                            }
+                            }
+                          >
+                            <Item item={item} selected={from === (idx*8)+itemIdx} />
+                          </Grid>
+                        )
+                          }) }
+                        <Grid item xs={0.5}>
+                          <SideBySide>
+                            <IconButton aria-label="add" onClick={() => addBlankRow(idx)}>
+                              <AddIcon />
+                            </IconButton>
+                            <Checkbox onChange={() => setTracks([...tracks, { type: 'row', idx }])} />
+                          </SideBySide>
+                        </Grid>
+                      </>
+                      )
+                      }) }
+                  </Grid>
+                  <Grid item xs={3} />
+                </Grid>
+
+                <Paper elevation={7} sx={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+                  <CopyToClipboardButton text={layout ? `${bankTagLayoutString},banktag:${bankTagString}` : bankTagString} valid={tagName} />
+                </Paper>
+                
+              </Container>
+            </FormGroup>
+          </Paper>
+        </Container>
+        </Paper>
+      </ThemeProvider>
+  );
 };
+
+const SideBySide = styled.div`
+display: flex;
+flex-direction: row;
+`
+
+const Item = ({ item, selected }) => {
+  return (
+    <Paper elevation={selected ? 18 : 8} sx={{ height: '50px', width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} >
+      { item.id !== -1 ? <img src={`https://static.runelite.net/cache/item/icon/${item.id}.png`} title={item.label} onDragStart={(e) => e.preventDefault() } /> : null }
+    </Paper>
+  )
+}
+
 
 function App() {
   return (
