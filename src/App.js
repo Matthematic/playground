@@ -27,10 +27,10 @@ function isKeyPrintable(e) {
  * @param {*} str1 
  * @param {*} str2 
  */
-function withinWord(str1, str2) {
-  // Get the first char froms str1 thats after the end of str2, if it is NOT a space, then we are within a word
-  return str1[str2.length] === ' ' ? false : true;
-}
+// function withinWord(str1, str2) {
+//   // Get the first char froms str1 thats after the end of str2, if it is NOT a space, then we are within a word
+//   return str1[str2.length] === ' ' ? false : true;
+// }
 
 const TyperStateContext = React.createContext();
 const TyperSetterContext = React.createContext();
