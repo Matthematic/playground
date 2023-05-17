@@ -7,13 +7,16 @@ import {
   ThemeProvider,
   createTheme,
   Container,
-  Autocomplete,
+  Autocomplete, 
   Button,
   IconButton,
   Snackbar,
   Checkbox,
   FormGroup,
-  FormControlLabel } from '@mui/material'
+  FormControlLabel, 
+  Tooltip
+} from '@mui/material'
+import { createFilterOptions } from '@mui/material/Autocomplete';
 import styled from 'styled-components';
 import fill from 'lodash.fill';
 import cloneDeep from 'lodash.clonedeep';
@@ -21,6 +24,7 @@ import chunk from 'lodash.chunk';
 import flatten from 'lodash.flatten';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
+import VirtualAutocomplete from "./virtual.list"
 
 const theme = createTheme({
   palette: {
@@ -159,8 +163,7 @@ const TransposeButton = ({ onTranspose }) => {
 }
 
 
-// Root component for the typing test
-const Typer = () => {
+const BankTags = () => {
   const ROWS = 10;
   const [names, setNames] = useState([])
   const autocompleteRef = useRef()
@@ -201,9 +204,13 @@ const Typer = () => {
   const shapeData = (data) => {
     const newData = []
     for (const name in data) {
-      if (!newData.find(d => d.label === data[name])) { // remove duplicates, which are the same items but noted
-        newData.push({label: `${data[name]}`, id: name })
+      const found = newData.find(d => d.id === name)
+      if (found) {
+        console.log("found duplicate id", data[name], found, name)
       }
+      //if (!newData.find(d => d.label === data[name])) { // remove duplicates, which are the same items but noted
+        newData.push({label: `${data[name]}`, id: name })
+      //}
     }
     return newData
   }
@@ -363,7 +370,12 @@ const Typer = () => {
                       setInput(e.target.value)
                     }
                   }}
+                  filterOptions={createFilterOptions({
+                    matchFrom: 'any',
+                    limit: 3,
+                  })}
                   renderInput={(params) => <TextField {...params} label="Search for an item" />}
+                  handleHomeEndKeys
                 />
                 <Grid container xs={12}>
                   <Grid item xs={3} />
@@ -453,9 +465,11 @@ flex-direction: row;
 
 const Item = ({ item, selected }) => {
   return (
-    <Paper elevation={selected ? 18 : 8} sx={{ height: '50px', width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} >
-      { item.id !== -1 ? <img src={`https://static.runelite.net/cache/item/icon/${item.id}.png`} title={item.label} onDragStart={(e) => e.preventDefault() } /> : null }
-    </Paper>
+    <Tooltip title={`${item.label} ${item.id}`}>
+      <Paper elevation={selected ? 18 : 8} sx={{ height: '50px', width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} >
+        { item.id !== -1 ? <img src={`https://static.runelite.net/cache/item/icon/${item.id}.png`} onDragStart={(e) => e.preventDefault() } /> : null }
+      </Paper>
+    </Tooltip>
   )
 }
 
@@ -463,7 +477,7 @@ const Item = ({ item, selected }) => {
 function App() {
   return (
     <div className="app">
-      <Typer />
+      <BankTags />
     </div>
   );
 }
